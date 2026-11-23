@@ -4,9 +4,17 @@
 [![FreePBX Compatibility](https://img.shields.io/badge/FreePBX-14%2B-green.svg)](https://www.freepbx.org/)
 [![Asterisk Compatibility](https://img.shields.io/badge/Asterisk-13%2B-orange.svg)](https://www.asterisk.org/)
 
-A simple and effective PHP script designed for FreePBX and Asterisk servers, providing a convenient Click-to-Call Web API. This script allows users to initiate calls directly from a web interface. It leverages the Asterisk Manager Interface (AMI).
+## Описание
 
-Adapted from [Alisson Pelizaro's Click-to-Call script](https://github.com/alissonpelizaro/Asterisk-Click-to-Call), this version adds input validation, JSON responses, improved readability, PJSIP support, and enhanced error handling.
+Простой PHP-скрипт для серверов FreePBX и Asterisk: веб-API Click-to-Call. По HTTP-запросу с параметрами внутреннего номера (`exten`) и вызываемого номера (`number`) скрипт через Asterisk Manager Interface (AMI) сначала звонит на указанный внутренний номер, затем соединяет абонента с целевым номером. Ответ — JSON с признаком успеха, описанием ошибки и типом технологии (PJSIP или CHAN_SIP). Реализована проверка формата параметров и ограничение доступа по IP (только частные сети). Скрипт размещается в веб-каталоге PBX и вызывается как `click.php`.
+
+Адаптация [скрипта Alisson Pelizaro](https://github.com/alissonpelizaro/Asterisk-Click-to-Call) с валидацией входных данных, JSON-ответами, поддержкой PJSIP и расширенной обработкой ошибок.
+
+## Description
+
+A simple and effective PHP script for FreePBX and Asterisk servers: a Click-to-Call web API. An HTTP request with extension (`exten`) and destination (`number`) uses the Asterisk Manager Interface (AMI) to ring the extension first, then connect the callee to the target number. Responses are JSON (success, errors, PJSIP/SIP technology). Input validation and private-network IP checks are included. Deploy as `click.php` under your PBX web root.
+
+Adapted from [Alisson Pelizaro's Click-to-Call script](https://github.com/alissonpelizaro/Asterisk-Click-to-Call), with input validation, JSON responses, PJSIP support, and improved error handling.
 
 ## Table of Contents
 
@@ -49,7 +57,7 @@ Before installing the Click-to-Call script, ensure your system meets the followi
 Follow these simple steps to install and configure the Click-to-Call script on your FreePBX server:
 
 1. **Upload the Script**
-   - Place the `freepbx-click-to-call.php` file in your web directory:
+   - Place the `click.php` file in your web directory:
      ```bash
      /var/www/html/
      ```
@@ -64,14 +72,14 @@ Follow these simple steps to install and configure the Click-to-Call script on y
 3. **Set Permissions**
    - Ensure the script has appropriate permissions so that the web server can execute the PHP script:
      ```bash
-     chmod 644 /var/www/html/freepbx-click-to-call.php
-     chown www-data:www-data /var/www/html/freepbx-click-to-call.php
+     chmod 644 /var/www/html/click.php
+     chown www-data:www-data /var/www/html/click.php
      ```
 
 4. **Verify Installation**
    - Test the script by accessing it through your web browser:
      ```
-     http://YOUR.PBX.IP/freepbx-click-to-call.php?exten=123&number=0612345678
+     http://YOUR.PBX.IP/click.php?exten=123&number=0612345678
      ```
    - You should receive a JSON response indicating success or any configuration issues.
 
@@ -120,7 +128,7 @@ $config = [
 To initiate a call, simply open the following URL in your browser or call it via an HTTP request:
 
 ```http
-http://YOUR.PBX.IP/freepbx-click-to-call.php?exten=123&number=0612345678
+http://YOUR.PBX.IP/click.php?exten=123&number=0612345678
 ```
 
 - Replace `123` with the extension number you want to ring first.
@@ -140,13 +148,13 @@ The specified extension will ring first. Once answered, FreePBX will automatical
 #### Using cURL
 
 ```bash
-curl "http://YOUR.PBX.IP/freepbx-click-to-call.php?exten=123&number=0612345678"
+curl "http://YOUR.PBX.IP/click.php?exten=123&number=0612345678"
 ```
 
 #### Using PHP
 
 ```php
-$response = file_get_contents('http://YOUR.PBX.IP/freepbx-click-to-call.php?exten=123&number=0612345678');
+$response = file_get_contents('http://YOUR.PBX.IP/click.php?exten=123&number=0612345678');
 $result = json_decode($response, true);
 if ($result['Success']) {
     echo "Call initiated successfully!";
@@ -158,7 +166,7 @@ if ($result['Success']) {
 #### Using JavaScript/jQuery
 
 ```javascript
-$.getJSON('http://YOUR.PBX.IP/freepbx-click-to-call.php?exten=123&number=0612345678', function(data) {
+$.getJSON('http://YOUR.PBX.IP/click.php?exten=123&number=0612345678', function(data) {
     if (data.Success) {
         alert("Call initiated successfully!");
     } else {
@@ -197,7 +205,7 @@ The Click-to-Call script provides a simple HTTP API that returns JSON responses.
 ### Endpoint
 
 ```
-GET /freepbx-click-to-call.php
+GET /click.php
 ```
 
 ### Parameters
@@ -393,6 +401,11 @@ tail -f /var/log/asterisk/full
 ```
 
 ## Version History
+
+### v1.0.1 (2026-11-23)
+- Renamed main script to `click.php`
+- Russian and English descriptions at the top of README
+- Added CHANGELOG.md; versioning scheme 1.0.x
 
 ### v1.0.0 (2023-04-01)
 - Initial release

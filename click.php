@@ -5,6 +5,8 @@
  * Provides input validation, JSON results, and improved readability.
  * Provides pjsip support and error handling.
  * This script is intended to be used with FreePBX and Asterisk for click-to-call functionality.
+ *
+ * @version 1.0.1
  */
 
 // Configuration settings
