@@ -9,7 +9,7 @@ and this project adheres to patch releases under **1.0.x** (1.0.0, 1.0.1, 1.0.2,
 
 ### Changed
 - Renamed `freepbx-click-to-call.php` to `click.php`
-- README: Russian description first, then English; all URLs and paths updated
+- README: full Russian documentation first, then full English; all URLs and paths updated
 - Documented version **1.0.1** in script header (`@version`)
 
 ### Added

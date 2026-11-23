@@ -4,11 +4,401 @@
 [![FreePBX Compatibility](https://img.shields.io/badge/FreePBX-14%2B-green.svg)](https://www.freepbx.org/)
 [![Asterisk Compatibility](https://img.shields.io/badge/Asterisk-13%2B-orange.svg)](https://www.asterisk.org/)
 
+---
+
+# Документация (русский)
+
 ## Описание
 
 Простой PHP-скрипт для серверов FreePBX и Asterisk: веб-API Click-to-Call. По HTTP-запросу с параметрами внутреннего номера (`exten`) и вызываемого номера (`number`) скрипт через Asterisk Manager Interface (AMI) сначала звонит на указанный внутренний номер, затем соединяет абонента с целевым номером. Ответ — JSON с признаком успеха, описанием ошибки и типом технологии (PJSIP или CHAN_SIP). Реализована проверка формата параметров и ограничение доступа по IP (только частные сети). Скрипт размещается в веб-каталоге PBX и вызывается как `click.php`.
 
 Адаптация [скрипта Alisson Pelizaro](https://github.com/alissonpelizaro/Asterisk-Click-to-Call) с валидацией входных данных, JSON-ответами, поддержкой PJSIP и расширенной обработкой ошибок.
+
+## Содержание
+
+- [Возможности](#возможности)
+- [Требования](#требования)
+- [Установка](#установка)
+- [Настройка](#настройка)
+- [Использование](#использование)
+- [Документация API](#документация-api)
+- [Безопасность](#безопасность)
+- [Устранение неполадок](#устранение-неполадок)
+- [Удалённая работа](#удалённая-работа)
+- [История версий](#история-версий)
+- [Лицензия](#лицензия)
+- [Благодарности](#благодарности)
+
+## Возможности
+
+- **Простая интеграция**: быстрое подключение к существующей связке FreePBX и Asterisk.
+- **Ответ в JSON**: удобная интеграция с CRM, порталами и другими приложениями.
+- **CHAN_SIP и PJSIP**: автоматическое определение технологии внутреннего номера.
+- **Проверка данных и IP**: валидация параметров и доступ только из частных сетей.
+- **Асинхронный Originate**: вызовы ставятся в очередь AMI без блокировки HTTP-ответа.
+- **Подробные ошибки**: понятные сообщения в поле `Description`.
+- **Шаблон Caller ID**: настраиваемый отображаемый номер при исходящем вызове.
+
+## Требования
+
+Перед установкой убедитесь, что выполнены условия:
+
+- **PHP**: 7.0 и выше, расширения `json` и `sockets`
+- **FreePBX**: 14 и выше (проверялось на v14)
+- **Asterisk**: 13 и выше (проверялось на v18)
+- **Сеть**: для безопасности скрипт рассчитан на обращение из локальной (частной) сети
+- **AMI**: включён и настроен Asterisk Manager Interface
+
+## Установка
+
+1. **Загрузите скрипт**
+   - Поместите файл `click.php` в веб-каталог, например:
+     ```bash
+     /var/www/html/
+     ```
+
+2. **Настройте учётные данные AMI**
+   - Параметры берутся из:
+     ```bash
+     /etc/asterisk/manager.conf
+     ```
+   - Укажите логин и пароль AMI в массиве `$config` в начале `click.php`.
+
+3. **Права доступа**
+   - Веб-сервер должен иметь право читать и выполнять PHP-файл:
+     ```bash
+     chmod 644 /var/www/html/click.php
+     chown www-data:www-data /var/www/html/click.php
+     ```
+
+4. **Проверка**
+   - Откройте в браузере или выполните HTTP-запрос:
+     ```
+     http://YOUR.PBX.IP/click.php?exten=123&number=0612345678
+     ```
+   - В ответе должен быть JSON об успехе или об ошибке конфигурации.
+
+## Настройка
+
+Параметры задаются в массиве `$config` в начале `click.php`:
+
+| Параметр | По умолчанию | Описание |
+|----------|----------------|----------|
+| `host` | 127.0.0.1 | Адрес AMI; обычно localhost, если скрипт на том же сервере, что FreePBX |
+| `port` | 5038 | Порт AMI |
+| `user` | admin | Имя пользователя AMI из `manager.conf` |
+| `secret` | MYSECRETPASS | Пароль пользователя AMI |
+| `callerIdTemplate` | CTR Plugin (%s) | Шаблон Caller ID; `%s` — вызываемый номер |
+| `context` | from-internal | Контекст диалплана для исходящего вызова (стандарт FreePBX) |
+| `waitTime` | 30 | Секунд ожидания ответа внутреннего номера |
+| `priority` | 1 | Приоритет в диалплане |
+| `maxRetry` | 2 | Зарезервировано в конфиге (в текущей версии не используется в коде) |
+
+### Примеры изменений
+
+Шаблон Caller ID «Исходящий на %s»:
+
+```php
+$config = [
+    // ... other settings ...
+    'callerIdTemplate' => 'Outbound Call to (%s)',
+    // ... other settings ...
+];
+```
+
+Увеличить время ожидания до 45 секунд:
+
+```php
+$config = [
+    // ... other settings ...
+    'waitTime' => 45,
+    // ... other settings ...
+];
+```
+
+## Использование
+
+### Базовый сценарий
+
+```http
+http://YOUR.PBX.IP/click.php?exten=123&number=0612345678
+```
+
+- `123` — внутренний номер, который должен зазвонить первым.
+- `0612345678` — номер, который наберёт АТС после ответа на внутреннем.
+
+Сначала звонит указанный внутренний; после ответа FreePBX соединяет с заданным номером.
+
+### Параметры запроса
+
+| Параметр | Описание | Правила |
+|----------|----------|---------|
+| `exten` | Внутренний номер, который звонит первым | Только цифры 0–9 |
+| `number` | Номер для дозвона после ответа | Цифры и опционально `+` в начале |
+
+### Примеры вызова API
+
+#### cURL
+
+```bash
+curl "http://YOUR.PBX.IP/click.php?exten=123&number=0612345678"
+```
+
+#### PHP
+
+```php
+$response = file_get_contents('http://YOUR.PBX.IP/click.php?exten=123&number=0612345678');
+$result = json_decode($response, true);
+if ($result['Success']) {
+    echo "Call initiated successfully!";
+} else {
+    echo "Error: " . $result['Description'];
+}
+```
+
+#### JavaScript / jQuery
+
+```javascript
+$.getJSON('http://YOUR.PBX.IP/click.php?exten=123&number=0612345678', function(data) {
+    if (data.Success) {
+        alert("Call initiated successfully!");
+    } else {
+        alert("Error: " + data.Description);
+    }
+});
+```
+
+## Удалённая работа
+
+Скрипт удобен сотрудникам вне офиса, если внутренний номер переадресован на мобильный: звонок идёт через корпоративную АТС, а не с личного телефона.
+
+### Как это работает
+
+1. Сотрудник нажимает ссылку Click-to-Call в CRM, почте и т.п.
+2. Скрипт инициирует вызов на внутренний номер сотрудника.
+3. При переадресации звонок приходит на мобильный.
+4. После ответа АТС набирает целевой номер.
+5. Тарификация по правилам PBX, а не мобильного оператора.
+
+### Пример: плагин Outlook
+
+Интеграция с кастомным плагином Outlook (не входит в этот репозиторий): клик по номеру в письме → запрос к API → звонок на внутренний → переадресация на мобильный → соединение с выбранным номером.
+
+**Важно:** по умолчанию доступ к скрипту разрешён только с частных IP. Для доступа из интернета нужны VPN в офисную сеть и/или доработка проверки IP и дополнительная авторизация.
+
+## Документация API
+
+HTTP API с ответами в формате JSON.
+
+### Точка входа
+
+```
+GET /click.php
+```
+
+### Параметры
+
+| Параметр | Обязательный | Описание |
+|----------|--------------|----------|
+| `exten` | Да | Внутренний номер, который звонит первым |
+| `number` | Да | Номер для соединения после ответа |
+
+### Формат ответа
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `Success` | boolean | Успешно ли поставлен в очередь вызов |
+| `ValidInput` | boolean | Корректны ли входные параметры |
+| `Description` | string | Текст результата или ошибки |
+| `Technology` | string | PJSIP или SIP (при успехе) |
+| `OriginateResponse` | string | Сырой ответ AMI (при успехе) |
+
+### Примеры ответов
+
+#### Успех
+
+```json
+{
+  "Success": true,
+  "ValidInput": true,
+  "Description": "Extension 123 is calling 0612345678.",
+  "Technology": "PJSIP",
+  "OriginateResponse": "Response: Success\r\nMessage: Originate successfully queued\r\n\r\n"
+}
+```
+
+#### Неверный формат номера
+
+```json
+{
+  "Success": false,
+  "ValidInput": false,
+  "Description": "Invalid number format: abc123",
+  "Technology": "",
+  "OriginateResponse": ""
+}
+```
+
+#### Неверный внутренний номер
+
+```json
+{
+  "Success": false,
+  "ValidInput": false,
+  "Description": "Invalid extension format: abc",
+  "Technology": "",
+  "OriginateResponse": ""
+}
+```
+
+#### Запрещённый IP
+
+```json
+{
+  "Success": false,
+  "ValidInput": false,
+  "Description": "Unauthorized IP address: 203.0.113.1",
+  "Technology": "",
+  "OriginateResponse": ""
+}
+```
+
+#### Ошибка аутентификации AMI
+
+```json
+{
+  "Success": false,
+  "ValidInput": false,
+  "Description": "Authentication failed",
+  "Technology": "",
+  "OriginateResponse": ""
+}
+```
+
+#### Не удалось определить технологию
+
+```json
+{
+  "Success": false,
+  "ValidInput": false,
+  "Description": "Failed to retrieve technology for extension: 123",
+  "Technology": "",
+  "OriginateResponse": ""
+}
+```
+
+#### Сбой инициации вызова
+
+```json
+{
+  "Success": false,
+  "ValidInput": false,
+  "Description": "Call initiation failed",
+  "Technology": "PJSIP",
+  "OriginateResponse": "Response: Error\r\nMessage: Channel PJSIP/123 not available\r\n\r\n"
+}
+```
+
+## Безопасность
+
+### Проверка IP
+
+Запросы с публичных адресов отклоняются:
+
+```php
+if (filter_var($_SERVER["REMOTE_ADDR"], FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+    $result = setError($result, "Unauthorized IP address: %s", $_SERVER["REMOTE_ADDR"]);
+}
+```
+
+Для доступа с конкретных внешних IP нужно изменить эту проверку (или использовать VPN и токен).
+
+### Валидация параметров
+
+- `exten` — только цифры
+- `number` — цифры и опционально ведущий `+`
+
+Рекомендуется также: вынести пароль AMI из веб-каталога, ограничить права пользователя AMI, добавить токен API и HTTPS.
+
+## Устранение неполадок
+
+### Внутренний не звонит
+
+- **Регистрация абонента**:
+  ```bash
+  asterisk -rx "pjsip show endpoint <extension>"
+  asterisk -rx "sip show peer <extension>"
+  ```
+- **Контекст диалплана** (`from-internal` по умолчанию):
+  ```bash
+  asterisk -rx "dialplan show from-internal"
+  ```
+- **Файрвол и NAT**:
+  ```bash
+  iptables -L -n
+  ```
+
+### Ошибки AMI
+
+- **Учётные данные** — совпадение с `/etc/asterisk/manager.conf`:
+  ```bash
+  grep -A 10 "\[admin\]" /etc/asterisk/manager.conf
+  ```
+- **Права AMI-пользователя**:
+  ```
+  read = system,call,log,verbose,command,agent,user,config,dtmf,reporting,cdr,dialplan,originate
+  write = system,call,log,verbose,command,agent,user,config,dtmf,reporting,cdr,dialplan,originate
+  ```
+
+### Определение технологии (PJSIP/SIP)
+
+```bash
+asterisk -rx "database show DEVICE"
+```
+
+### Отладка в CLI
+
+```bash
+asterisk -rvvvvv
+```
+
+```
+core set verbose 5
+```
+
+### Логи
+
+```bash
+tail -f /var/log/asterisk/full
+```
+
+## История версий
+
+### v1.0.1 (2026-11-23)
+
+- Переименование основного скрипта в `click.php`
+- Полная русская и английская документация в README
+- Добавлен CHANGELOG.md, схема версий 1.0.x
+
+### v1.0.0 (2023-04-01)
+
+- Первый релиз
+- PJSIP и CHAN_SIP
+- JSON API, валидация, проверка IP
+
+## Лицензия
+
+Проект распространяется по лицензии MIT — см. файл LICENSE.
+
+## Благодарности
+
+Часть работы выполнена при поддержке [Contour — поставщик листового металла](https://www.contour.eu/en/).
+
+Адаптация [Asterisk Click-to-Call](https://github.com/alissonpelizaro/Asterisk-Click-to-Call) Alisson Pelizaro.
+
+---
+
+# Documentation (English)
 
 ## Description
 
@@ -97,7 +487,7 @@ The script includes several configuration options that can be customized to fit 
 | `context` | from-internal | The dialplan context to use for the outgoing call. The default is `from-internal`, which is standard for FreePBX. |
 | `waitTime` | 30 | The number of seconds to wait for the extension to answer before timing out. |
 | `priority` | 1 | The dialplan priority to use for the outgoing call. |
-| `maxRetry` | 2 | The maximum number of retry attempts if the call fails. |
+| `maxRetry` | 2 | Reserved in config (not used in the current script version). |
 
 ### Example Configuration Changes
 
@@ -186,6 +576,8 @@ This Click-to-Call script is particularly useful for remote workers who wish to 
 3. The extension forwards the call to the employee's mobile phone
 4. When the employee answers, the PBX connects them to the outgoing number
 5. All calls are billed according to the PBX dial plan, not the employee's mobile plan
+
+**Note:** By default only private client IPs are allowed. Internet access requires VPN and/or IP whitelist changes plus API authentication.
 
 ### Integration Example: Outlook Plugin
 
@@ -403,11 +795,13 @@ tail -f /var/log/asterisk/full
 ## Version History
 
 ### v1.0.1 (2026-11-23)
+
 - Renamed main script to `click.php`
-- Russian and English descriptions at the top of README
+- Full Russian and English documentation in README
 - Added CHANGELOG.md; versioning scheme 1.0.x
 
 ### v1.0.0 (2023-04-01)
+
 - Initial release
 - Support for PJSIP and CHAN_SIP
 - JSON response format
